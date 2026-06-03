@@ -1,0 +1,42 @@
+name: daily-flight-search
+
+# Runs once a day and commits the updated CSV back to the repo, so your price
+# history becomes a version-controlled audit trail. Manual runs allowed too.
+on:
+  schedule:
+    - cron: "17 6 * * *"   # 06:17 UTC daily. Change if you like; one snapshot/day by design.
+  workflow_dispatch: {}     # lets you trigger a run by hand from the Actions tab
+
+permissions:
+  contents: write           # required so the job can push the updated log
+
+jobs:
+  search:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run daily flight search
+        env:
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+        run: python search.py
+
+      - name: Commit updated log
+        run: |
+          git config user.name  "flight-tracker-bot"
+          git config user.email "actions@github.com"
+          git add flights_log.csv debug_last_raw.json || true
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "log: $(date -u +%Y-%m-%d) flight prices"
+            git push
+          fi
